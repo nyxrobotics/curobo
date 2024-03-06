@@ -45,8 +45,8 @@ robot_cfg:
       - "right_finger_extension_link"
       - "hand_camera_link"
       - "attached_object"
-      # - "head_pan_link"
-      # - "head_tilt_link"
+      - "head_pan_link"
+      - "head_tilt_link"
     collision_spheres:
       base_link:
         - "center": [0.0, 0.0, 0.23]
@@ -399,36 +399,36 @@ robot_cfg:
           "radius": 0.02
         - "center": [-0.01, -0.017, 0.0]
           "radius": 0.02
-      # head_pan_link:
-      #  - "center": [0.126, -0.076, 0.036]
-      #    "radius": 0.09
-      #  - "center": [0.055, -0.076, 0.036]
-      #    "radius": 0.09
-      #  - "center": [0.126, 0.076, 0.036]
-      #    "radius": 0.09
-      #  - "center": [0.055, 0.076, 0.036]
-      #    "radius": 0.09
-      #  - "center": [0.096, 0.0, 0.036]
-      #    "radius": 0.09
-      #  - "center": [0.188, -0.137, -0.02]
-      #    "radius": 0.03
-      #  - "center": [0.188, 0.137, -0.02]
-      #    "radius": 0.03
-      #  - "center": [0.086, 0.137, -0.02]
-      #    "radius": 0.03
-      #  - "center": [0.086, -0.137, -0.02]
-      #    "radius": 0.03
-      # head_tilt_link:
-      #  - "center": [-0.0, 0.055, 0.036]
-      #    "radius": 0.09
-      #  - "center": [-0.0, -0.055, 0.036]
-      #    "radius": 0.09
-      #  - "center": [0.059, 0.0, -0.02]
-      #    "radius": 0.03
-      #  - "center": [0.059, -0.104, -0.02]
-      #    "radius": 0.03
-      #  - "center": [0.059, 0.104, -0.02]
-      #    "radius": 0.03
+      head_pan_link:
+        - "center": [0.126, -0.076, 0.036]
+          "radius": 0.09
+        - "center": [0.055, -0.076, 0.036]
+          "radius": 0.09
+        - "center": [0.126, 0.076, 0.036]
+          "radius": 0.09
+        - "center": [0.055, 0.076, 0.036]
+          "radius": 0.09
+        - "center": [0.096, 0.0, 0.036]
+          "radius": 0.09
+        - "center": [0.188, -0.137, -0.02]
+          "radius": 0.03
+        - "center": [0.188, 0.137, -0.02]
+          "radius": 0.03
+        - "center": [0.086, 0.137, -0.02]
+          "radius": 0.03
+        - "center": [0.086, -0.137, -0.02]
+          "radius": 0.03
+      head_tilt_link:
+        - "center": [-0.0, 0.055, 0.036]
+          "radius": 0.09
+        - "center": [-0.0, -0.055, 0.036]
+          "radius": 0.09
+        - "center": [0.059, 0.0, -0.02]
+          "radius": 0.03
+        - "center": [0.059, -0.104, -0.02]
+          "radius": 0.03
+        - "center": [0.059, 0.104, -0.02]
+          "radius": 0.03
     collision_sphere_buffer: 0.0
     extra_collision_spheres: {"attached_object": 4}
     self_collision_ignore:
@@ -436,22 +436,22 @@ robot_cfg:
         - "torso_link"
         - "arm_link1"
         - "arm_link2"
-        # - "head_pan_link"
-        # - "head_tilt_link"
+        - "head_pan_link"
+        - "head_tilt_link"
       "torso_link":
         - "arm_link1"
-        # - "head_pan_link"
-        # - "head_tilt_link"
+        - "head_pan_link"
+        - "head_tilt_link"
       "arm_link1":
         - "arm_link2"
         - "arm_link3"
         - "arm_link4"
-        # - "head_pan_link"
-        # - "head_tilt_link"
+        - "head_pan_link"
+        - "head_tilt_link"
       "arm_link2":
         - "arm_link3"
-        # - "head_pan_link"
-        # - "head_tilt_link"
+        - "head_pan_link"
+        - "head_tilt_link"
       "arm_link3":
         - "arm_link4"
         - "arm_link5"
@@ -468,8 +468,8 @@ robot_cfg:
         - "right_finger_extension_link"
         - "hand_camera_link"
         - "attached_object"
-        # - "head_pan_link"
-        # - "head_tilt_link"
+        - "head_pan_link"
+        - "head_tilt_link"
       "arm_link4":
         - "arm_link5"
         - "arm_link6"
@@ -577,8 +577,8 @@ robot_cfg:
         - "attached_object"
       "hand_camera_link":
         - "attached_object"
-    # "head_pan_link":
-    #   - "head_tilt_link"
+      "head_pan_link":
+        - "head_tilt_link"
     self_collision_buffer: {
       "base_link": 0,
       "torso_link": 0,
@@ -599,8 +599,8 @@ robot_cfg:
       "right_outer_knuckle": 0,
       "right_finger_extension_link": 0,
       "hand_camera_link": 0,
-      # "head_pan_link": 0,
-      # "head_tilt_link": 0,
+      "head_pan_link": 0,
+      "head_tilt_link": 0,
     }
     extra_links: {
       "attached_object": {
@@ -618,6 +618,8 @@ robot_cfg:
       "right_finger_joint": 0.0,
       "right_outer_knuckle_joint": 0.0,
       "right_inner_knuckle_joint": 0.0,
+      "head_pan_joint": 0.0,
+      "head_tilt_joint": 0.0
     }
     use_global_cumul: True
     mesh_link_names: [] # List[str]
@@ -638,8 +640,10 @@ robot_cfg:
         - 'right_finger_joint'
         - 'right_outer_knuckle_joint'
         - 'right_inner_kunckle_joint'
-      retract_config: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-      null_space_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-      cspace_distance_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        - 'head_pan_link'
+        - 'head_tilt_link'
+      retract_config: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      null_space_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      cspace_distance_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
       max_jerk: 500.0
       max_acceleration: 10.0
