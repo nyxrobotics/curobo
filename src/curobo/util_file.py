@@ -11,6 +11,7 @@
 # Standard Library
 import os
 import shutil
+import sys
 from typing import Dict, List
 
 # Third Party
@@ -168,7 +169,6 @@ def get_motion_gen_robot_list() -> List[str]:
         "franka.yml",
         "ur5e.yml",
         "ur10e.yml",
-        "dual_ur10e.yml",
         "tm12.yml",
         "jaco7.yml",
         "kinova_gen3.yml",

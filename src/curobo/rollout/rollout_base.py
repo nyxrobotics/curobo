@@ -33,8 +33,10 @@ from curobo.types.tensor import (
     T_BValue_float,
 )
 from curobo.util.helpers import list_idx_if_not_none
+from curobo.util.logger import log_info
 from curobo.util.sample_lib import HaltonGenerator
 from curobo.util.tensor_util import copy_tensor
+from curobo.util.torch_utils import get_torch_jit_decorator
 
 
 @dataclass
@@ -222,6 +224,22 @@ class Goal(Sequence):
             links_goal_pose=links_goal_pose,
         )
 
+    def clone(self):
+        return Goal(
+            goal_state=self.goal_state,
+            goal_pose=self.goal_pose,
+            current_state=self.current_state,
+            retract_state=self.retract_state,
+            batch_pose_idx=self.batch_pose_idx,
+            batch_world_idx=self.batch_world_idx,
+            batch_enable_idx=self.batch_enable_idx,
+            batch_current_state_idx=self.batch_current_state_idx,
+            batch_retract_state_idx=self.batch_retract_state_idx,
+            batch_goal_state_idx=self.batch_goal_state_idx,
+            links_goal_pose=self.links_goal_pose,
+            n_goalset=self.n_goalset,
+        )
+
     def _tensor_repeat_seeds(self, tensor, num_seeds):
         return tensor_repeat_seeds(tensor, num_seeds)
 
@@ -281,9 +299,9 @@ class Goal(Sequence):
         if self.goal_pose is not None:
             self.goal_pose = self.goal_pose.to(tensor_args)
         if self.goal_state is not None:
-            self.goal_state = self.goal_state.to(**vars(tensor_args))
+            self.goal_state = self.goal_state.to(**(tensor_args.as_torch_dict()))
         if self.current_state is not None:
-            self.current_state = self.current_state.to(**vars(tensor_args))
+            self.current_state = self.current_state.to(**(tensor_args.as_torch_dict()))
         return self
 
     def copy_(self, goal: Goal, update_idx_buffers: bool = True):
@@ -333,12 +351,13 @@ class Goal(Sequence):
             if ref_buffer is not None:
                 ref_buffer = ref_buffer.copy_(buffer)
             else:
+                log_info("breaking reference")
                 ref_buffer = buffer.clone()
         return ref_buffer
 
     def _copy_tensor(self, ref_buffer, buffer):
         if buffer is not None:
-            if ref_buffer is not None:
+            if ref_buffer is not None and buffer.shape == ref_buffer.shape:
                 if not copy_tensor(buffer, ref_buffer):
                     ref_buffer = buffer.clone()
             else:
@@ -397,6 +416,8 @@ class Goal(Sequence):
 @dataclass
 class RolloutConfig:
     tensor_args: TensorDeviceType
+    sum_horizon: bool = False
+    sampler_seed: int = 1312
 
 
 class RolloutBase:
@@ -416,7 +437,7 @@ class RolloutBase:
             self.tensor_args,
             up_bounds=self.action_bound_highs,
             low_bounds=self.action_bound_lows,
-            seed=1312,
+            seed=self.sampler_seed,
         )
 
     @abstractmethod
@@ -441,7 +462,7 @@ class RolloutBase:
         return out_metrics
 
     def get_metrics_cuda_graph(self, state: State):
-        return get_metrics(state)
+        return self.get_metrics(state)
 
     def rollout_fn(self, act):
         pass
@@ -498,6 +519,10 @@ class RolloutBase:
     def horizon(self) -> int:
         raise NotImplementedError
 
+    @property
+    def action_horizon(self) -> int:
+        return self.horizon
+
     def update_start_state(self, start_state: torch.Tensor):
         if self.start_state is None:
             self.start_state = start_state
@@ -534,6 +559,10 @@ class RolloutBase:
         self._rollout_constraint_cuda_graph_init = False
         if self.cu_rollout_constraint_graph is not None:
             self.cu_rollout_constraint_graph.reset()
+        self.reset_shape()
+
+    def reset_shape(self):
+        pass
 
     @abstractmethod
     def get_action_from_state(self, state: State):
@@ -553,7 +582,7 @@ class RolloutBase:
         return q_js
 
 
-@torch.jit.script
+@get_torch_jit_decorator()
 def tensor_repeat_seeds(tensor, num_seeds: int):
     a = (
         tensor.view(tensor.shape[0], 1, tensor.shape[-1])

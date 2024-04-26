@@ -10,4 +10,4 @@ its affiliates is strictly prohibited.
 -->
 This folder contains scripts to run the motion planning benchmarks.
 
-Refer to Benchmarks & Profiling instructions in documentation for more information.
+Refer to Benchmarks & Profiling page for latest resutls: https://curobo.org/source/getting_started/4_benchmarks.html.

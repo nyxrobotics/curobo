@@ -42,6 +42,7 @@ class WrapResult:
     metrics: Optional[RolloutMetrics] = None
     debug: Any = None
     js_action: Optional[State] = None
+    raw_action: Optional[torch.Tensor] = None
 
     def clone(self):
         return WrapResult(
@@ -53,7 +54,7 @@ class WrapBase(WrapConfig):
     def __init__(self, config: Optional[WrapConfig] = None):
         if config is not None:
             WrapConfig.__init__(self, **vars(config))
-        self.n_envs = 1
+        self.n_problems = 1
         self.opt_dt = 0
         self._rollout_list = None
         self._opt_rollouts = None
@@ -82,11 +83,11 @@ class WrapBase(WrapConfig):
             debug_list.append(opt.debug_cost)
         return debug_list
 
-    def update_nenvs(self, n_envs):
-        if n_envs != self.n_envs:
-            self.n_envs = n_envs
+    def update_nproblems(self, n_problems):
+        if n_problems != self.n_problems:
+            self.n_problems = n_problems
             for opt in self.optimizers:
-                opt.update_nenvs(self.n_envs)
+                opt.update_nproblems(self.n_problems)
 
     def update_params(self, goal: Goal):
         with profiler.record_function("wrap_base/safety/update_params"):
@@ -116,9 +117,19 @@ class WrapBase(WrapConfig):
             opt.reset_cuda_graph()
         self._init_solver = False
 
+    def reset_shape(self):
+        self.safety_rollout.reset_shape()
+        for opt in self.optimizers:
+            opt.reset_shape()
+        self._init_solver = False
+
     @property
     def rollout_fn(self):
         return self.safety_rollout
+
+    @property
+    def tensor_args(self):
+        return self.safety_rollout.tensor_args
 
     def solve(self, goal: Goal, seed: Optional[torch.Tensor] = None):
         metrics = None
@@ -155,6 +166,7 @@ class WrapBase(WrapConfig):
             solve_time=self.opt_dt,
             metrics=metrics,
             debug={"steps": self.get_debug_data(), "cost": self.get_debug_cost()},
+            raw_action=act_seq,
         )
         return result
 

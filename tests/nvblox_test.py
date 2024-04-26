@@ -9,14 +9,19 @@
 # its affiliates is strictly prohibited.
 #
 
+# Standard Library
+import sys
+
 # Third Party
 import pytest
 import torch
 
 # CuRobo
-from curobo.geom.sdf.world import CollisionQueryBuffer, WorldCollisionConfig
-from curobo.geom.types import Cuboid, WorldConfig
+from curobo.geom.sdf.world import CollisionCheckerType, CollisionQueryBuffer, WorldCollisionConfig
+from curobo.geom.types import BloxMap, Cuboid, WorldConfig
 from curobo.types.base import TensorDeviceType
+from curobo.types.camera import CameraObservation
+from curobo.types.math import Pose
 from curobo.util_file import get_world_configs_path, join_path, load_yaml
 
 try:
@@ -38,7 +43,8 @@ def test_world_blox_trajectory():
     coll_cfg = WorldCollisionConfig(world_model=world_cfg, tensor_args=TensorDeviceType())
     coll_check = WorldBloxCollision(coll_cfg)
     x_sph = torch.as_tensor(
-        [[0.1, 0.2, 0.0, 10.5], [10.0, 0.0, 0.0, 0.0], [0.01, 0.01, 0.0, 0.1]], **vars(tensor_args)
+        [[0.1, 0.2, 0.0, 10.5], [10.0, 0.0, 0.0, 0.0], [0.01, 0.01, 0.0, 0.1]],
+        **(tensor_args.as_torch_dict())
     ).view(1, -1, 1, 4)
     # create buffers:
     query_buffer = CollisionQueryBuffer.initialize_from_shape(
@@ -63,7 +69,8 @@ def test_world_blox():
     coll_cfg = WorldCollisionConfig(world_model=world_cfg, tensor_args=TensorDeviceType())
     coll_check = WorldBloxCollision(coll_cfg)
     x_sph = torch.as_tensor(
-        [[0.1, 0.2, 0.0, 10.5], [10.0, 0.0, 0.0, 0.0], [0.01, 0.01, 0.0, 0.1]], **vars(tensor_args)
+        [[0.1, 0.2, 0.0, 10.5], [10.0, 0.0, 0.0, 0.0], [0.01, 0.01, 0.0, 0.1]],
+        **(tensor_args.as_torch_dict())
     ).view(1, 1, -1, 4)
     # create buffers:
     query_buffer = CollisionQueryBuffer.initialize_from_shape(
@@ -106,21 +113,19 @@ def test_world_blox_get_mesh():
     assert len(world_mesh.vertices) > 10
 
 
+@pytest.mark.skipif(sys.version_info < (3, 8), reason="pyglet requires python 3.8+")
 def test_nvblox_world_from_primitive_world():
     world_file = "collision_cubby.yml"
     tensor_args = TensorDeviceType()
     data_dict = load_yaml(join_path(get_world_configs_path(), world_file))
     world_cfg = WorldConfig.from_dict(data_dict).get_mesh_world(True)
     mesh = world_cfg.mesh[0].get_trimesh_mesh()
-    world_cfg.mesh[0].save_as_mesh("world.obj")
     # Third Party
-    from nvblox_torch.datasets.mesh_dataset import MeshDataset
-
-    # CuRobo
-    from curobo.geom.sdf.world import CollisionCheckerType
-    from curobo.geom.types import BloxMap
-    from curobo.types.camera import CameraObservation
-    from curobo.types.math import Pose
+    try:
+        # Third Party
+        from nvblox_torch.datasets.mesh_dataset import MeshDataset
+    except ImportError:
+        pytest.skip("pyrender and scikit-image is not installed")
 
     # create a nvblox collision checker:
     world_config = WorldConfig(
@@ -143,7 +148,7 @@ def test_nvblox_world_from_primitive_world():
     for i in range(len(m_dataset)):
         data = m_dataset[i]
         cam_obs = CameraObservation(
-            rgb_image=data["rgba"],
+            rgb_image=data["rgba"].permute(1, 2, 0),
             depth_image=data["depth"],
             intrinsics=data["intrinsics"],
             pose=Pose.from_matrix(data["pose"].to(device=tensor_args.device)),

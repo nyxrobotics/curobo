@@ -11,12 +11,11 @@
 
 # Standard Library
 import math
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 # Third Party
 import numpy as np
 import torch
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 from tqdm import tqdm
 
 # CuRobo
@@ -35,7 +34,7 @@ from curobo.types.base import TensorDeviceType
 from curobo.types.math import Pose
 from curobo.types.robot import RobotConfig
 from curobo.types.state import JointState
-from curobo.util.logger import log_error, log_warn
+from curobo.util.logger import log_error, log_info, log_warn
 from curobo.util_file import (
     file_exists,
     get_assets_path,
@@ -46,6 +45,15 @@ from curobo.util_file import (
     load_yaml,
 )
 from curobo.wrap.reacher.motion_gen import MotionGenResult
+
+try:
+    # Third Party
+    from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
+except ImportError:
+    raise ImportError(
+        "usd-core failed to import, install with pip install usd-core"
+        + " NOTE: Do not install this if using with ISAAC SIM."
+    )
 
 
 def set_prim_translate(prim, translation):
@@ -149,7 +157,11 @@ def set_geom_mesh_attrs(mesh_geom: UsdGeom.Mesh, obs: Mesh, timestep=None):
         primvar = primvarsapi.CreatePrimvar(
             "displayColor", Sdf.ValueTypeNames.Color3f, interpolation="faceVarying"
         )
-        primvar.Set([Gf.Vec3f(x[0] / 255.0, x[1] / 255.0, x[2] / 255.0) for x in obs.vertex_colors])
+        scale = 1.0
+        # color needs to be in range of 0-1. Hence converting if the color is in [0,255]
+        if max(np.ravel(obs.vertex_colors) > 1.0):
+            scale = 255.0
+        primvar.Set([Gf.Vec3f(x[0] / scale, x[1] / scale, x[2] / scale) for x in obs.vertex_colors])
 
     # low = np.min(verts, axis=0)
     # high = np.max(verts, axis=0)
@@ -800,15 +812,17 @@ class UsdHelper:
         kin_model: Optional[CudaRobotModel] = None,
         visualize_robot_spheres: bool = True,
         robot_color: Optional[List[float]] = None,
+        flatten_usd: bool = False,
     ):
         if kin_model is None:
             config_file = load_yaml(join_path(get_robot_configs_path(), robot_model_file))
+            if "robot_cfg" not in config_file:
+                config_file["robot_cfg"] = config_file
             config_file["robot_cfg"]["kinematics"]["load_link_names_with_mesh"] = True
             robot_cfg = CudaRobotModelConfig.from_data_dict(
                 config_file["robot_cfg"]["kinematics"], tensor_args=tensor_args
             )
             kin_model = CudaRobotModel(robot_cfg)
-
         m = kin_model.get_robot_link_meshes()
         offsets = [x.pose for x in m]
         robot_mesh_model = WorldConfig(mesh=m)
@@ -827,7 +841,7 @@ class UsdHelper:
             usd_helper.add_world_to_stage(world_model, base_frame=base_frame)
 
         animation_links = kin_model.kinematics_config.mesh_link_names
-        animation_poses = kin_model.get_link_poses(q_traj.position, animation_links)
+        animation_poses = kin_model.get_link_poses(q_traj.position.contiguous(), animation_links)
         # add offsets for visual mesh:
         for i, ival in enumerate(offsets):
             offset_pose = Pose.from_list(ival)
@@ -852,7 +866,7 @@ class UsdHelper:
             usd_helper.create_obstacle_animation(
                 sphere_traj, base_frame=base_frame, obstacles_frame="curobo/robot_collision"
             )
-        usd_helper.write_stage_to_file(save_path)
+        usd_helper.write_stage_to_file(save_path, flatten=flatten_usd)
 
     @staticmethod
     def load_robot(
@@ -890,19 +904,20 @@ class UsdHelper:
         visualize_robot_spheres: bool = True,
         robot_asset_prim_path=None,
         robot_color: Optional[List[float]] = None,
+        flatten_usd: bool = False,
     ):
         usd_exists = False
         # if usd file doesn't exist, fall back to urdf animation script
 
         if kin_model is None:
-            config_file = load_yaml(join_path(get_robot_configs_path(), robot_model_file))
-            if "robot_cfg" in config_file:
-                config_file = config_file["robot_cfg"]
-            config_file["kinematics"]["load_link_names_with_mesh"] = True
-            config_file["kinematics"]["use_usd_kinematics"] = True
+            robot_model_file = load_yaml(join_path(get_robot_configs_path(), robot_model_file))
+            if "robot_cfg" in robot_model_file:
+                robot_model_file = robot_model_file["robot_cfg"]
+            robot_model_file["kinematics"]["load_link_names_with_mesh"] = True
+            robot_model_file["kinematics"]["use_usd_kinematics"] = True
 
             usd_exists = file_exists(
-                join_path(get_assets_path(), config_file["kinematics"]["usd_path"])
+                join_path(get_assets_path(), robot_model_file["kinematics"]["usd_path"])
             )
         else:
             if kin_model.generator_config.usd_path is not None:
@@ -914,7 +929,8 @@ class UsdHelper:
             )
             usd_exists = False
         if not usd_exists:
-            log_warn("robot usd not found, using urdf animation instead")
+            log_info("robot usd not found, using urdf animation instead")
+            robot_model_file["kinematics"]["use_usd_kinematics"] = False
             return UsdHelper.write_trajectory_animation(
                 robot_model_file,
                 world_model,
@@ -929,10 +945,11 @@ class UsdHelper:
                 kin_model=kin_model,
                 visualize_robot_spheres=visualize_robot_spheres,
                 robot_color=robot_color,
+                flatten_usd=flatten_usd,
             )
         if kin_model is None:
             robot_cfg = CudaRobotModelConfig.from_data_dict(
-                config_file["kinematics"], tensor_args=tensor_args
+                robot_model_file["kinematics"], tensor_args=tensor_args
             )
 
             kin_model = CudaRobotModel(robot_cfg)
@@ -978,7 +995,7 @@ class UsdHelper:
             usd_helper.create_obstacle_animation(
                 sphere_traj, base_frame=base_frame, obstacles_frame="curobo/robot_collision"
             )
-        usd_helper.write_stage_to_file(save_path)
+        usd_helper.write_stage_to_file(save_path, flatten=flatten_usd)
 
     @staticmethod
     def create_grid_usd(
@@ -994,6 +1011,7 @@ class UsdHelper:
         dt: float = 0.02,
         interpolation_steps: int = 1,
         prefix_string: Optional[str] = None,
+        flatten_usd: bool = False,
     ):
         # create stage:
         usd_helper = UsdHelper()
@@ -1036,7 +1054,7 @@ class UsdHelper:
 
         # write usd to disk:
 
-        usd_helper.write_stage_to_file(save_path)
+        usd_helper.write_stage_to_file(save_path, flatten=flatten_usd)
 
     def load_robot_usd(
         self,
@@ -1138,6 +1156,9 @@ class UsdHelper:
         grid_space: float = 1.0,
         write_robot_usd_path="assets/",
         robot_asset_prim_path="/panda",
+        fps: int = 24,
+        link_poses: Optional[Dict[str, Pose]] = None,
+        flatten_usd: bool = False,
     ):
         if goal_object is None:
             log_warn("Using franka gripper as goal object")
@@ -1150,10 +1171,26 @@ class UsdHelper:
                 color=[0.0, 0.8, 0.1, 1.0],
                 pose=goal_pose.to_list(),
             )
+
         if goal_object is not None:
             goal_object.pose = np.ravel(goal_pose.tolist()).tolist()
             world_config = world_config.clone()
             world_config.add_obstacle(goal_object)
+        if link_poses is not None:
+            link_goals = []
+            for k in link_poses.keys():
+                link_goals.append(
+                    Mesh(
+                        name="target_" + k,
+                        file_path=join_path(
+                            get_assets_path(),
+                            "robot/franka_description/meshes/visual/hand.dae",
+                        ),
+                        color=[0.0, 0.8, 0.1, 1.0],
+                        pose=link_poses[k].to_list(),
+                    )
+                )
+                world_config.add_obstacle(link_goals[-1])
         kin_model = UsdHelper.load_robot(robot_file)
         if link_spheres is not None:
             kin_model.kinematics_config.link_spheres = link_spheres
@@ -1173,7 +1210,7 @@ class UsdHelper:
             num_seeds, n_iters, dof = vis_traj.shape
             usd_paths = []
             for j in tqdm(range(num_seeds)):
-                current_traj = vis_traj[j].view(-1, dof)[:-1, :]  # we remove last timestep
+                current_traj = vis_traj[j].view(-1, dof)[:, :]  # we remove last timestep
 
                 usd_paths.append(save_prefix + "_ik_seed_" + str(j) + ".usd")
                 UsdHelper.write_trajectory_animation_with_robot_usd(
@@ -1181,13 +1218,14 @@ class UsdHelper:
                     world_config,
                     start_state,
                     JointState.from_position(current_traj),
-                    dt=(1),
+                    dt=(1 / fps),
                     save_path=usd_paths[-1],
                     base_frame="/world_base_" + str(j),
                     kin_model=kin_model,
                     visualize_robot_spheres=visualize_robot_spheres,
                     write_robot_usd_path=write_robot_usd_path,
                     robot_asset_prim_path=robot_asset_prim_path,
+                    flatten_usd=flatten_usd,
                 )
 
             UsdHelper.create_grid_usd(
@@ -1200,7 +1238,7 @@ class UsdHelper:
                 y_space=y_space,
                 x_per_row=int(math.floor(math.sqrt(len(usd_paths)))),
                 local_asset_path="",
-                dt=(1),
+                dt=(1.0 / fps),
             )
         if write_trajopt:
             if "trajopt_result" not in result.debug_info:
@@ -1226,8 +1264,9 @@ class UsdHelper:
                 (start_state.position.view(1, 1, 1, -1).repeat(n1, n2, 1, 1), full_traj), dim=-2
             )
             usd_paths = []
+            finetune_usd_paths = []
             for j in tqdm(range(num_seeds)):
-                current_traj = full_traj[j].view(-1, dof)[:-1, :]  # we remove last timestep
+                current_traj = full_traj[j].view(-1, dof)  # we remove last timestep
                 # add start state to current trajectory since it's not in the optimization:
                 usd_paths.append(save_prefix + "_trajopt_seed_" + str(j) + ".usd")
                 UsdHelper.write_trajectory_animation_with_robot_usd(
@@ -1235,13 +1274,14 @@ class UsdHelper:
                     world_config,
                     start_state,
                     JointState.from_position(current_traj),
-                    dt=(1 / 24),
+                    dt=(1.0 / fps),
                     save_path=usd_paths[-1],
                     base_frame="/world_base_" + str(j),
                     kin_model=kin_model,
                     visualize_robot_spheres=visualize_robot_spheres,
                     write_robot_usd_path=write_robot_usd_path,
                     robot_asset_prim_path=robot_asset_prim_path,
+                    flatten_usd=flatten_usd,
                 )
             # add finetuning step:
 
@@ -1257,6 +1297,7 @@ class UsdHelper:
                 full_traj = torch.cat(vis_traj, dim=0)
                 num_seeds, h, dof = vis_traj[-1].shape
                 n, _, _ = full_traj.shape  # this will have iterations
+                # print(full_traj.shape)
                 full_traj = full_traj.view(-1, num_seeds, h, dof)
                 n1, n2, _, _ = full_traj.shape
 
@@ -1268,25 +1309,28 @@ class UsdHelper:
 
                 full_traj = full_traj.transpose(0, 1).contiguous()  # n_seeds, n_steps, h, dof
                 for j in tqdm(range(num_seeds)):
-                    current_traj = full_traj[j].view(-1, dof)[:-1, :]  # we remove last timestep
+                    current_traj = full_traj[j][-1].view(-1, dof)
 
-                    usd_paths.append(save_prefix + "_trajopt_finetune_seed_" + str(j) + ".usd")
+                    finetune_usd_paths.append(save_prefix + "_finetune_seed_" + str(j) + ".usd")
                     UsdHelper.write_trajectory_animation_with_robot_usd(
                         robot_file,
                         world_config,
                         start_state,
                         JointState.from_position(current_traj),
-                        dt=(1 / 24),
-                        save_path=usd_paths[-1],
+                        dt=(1.0 / fps),
+                        save_path=finetune_usd_paths[-1],
                         base_frame="/world_base_" + str(j),
                         kin_model=kin_model,
                         visualize_robot_spheres=visualize_robot_spheres,
                         write_robot_usd_path=write_robot_usd_path,
                         robot_asset_prim_path=robot_asset_prim_path,
+                        flatten_usd=flatten_usd,
                     )
             x_space = y_space = grid_space
             if overlay_trajopt:
                 x_space = y_space = 0.0
+            if len(finetune_usd_paths) == 1:
+                usd_paths.append(finetune_usd_paths[0])
             UsdHelper.create_grid_usd(
                 usd_paths,
                 save_prefix + "_grid_trajopt.usd",
@@ -1297,5 +1341,18 @@ class UsdHelper:
                 y_space=y_space,
                 x_per_row=int(math.floor(math.sqrt(len(usd_paths)))),
                 local_asset_path="",
-                dt=(1 / 24),
+                dt=(1.0 / fps),
             )
+            if False and len(finetune_usd_paths) > 1:
+                UsdHelper.create_grid_usd(
+                    finetune_usd_paths,
+                    save_prefix + "_grid_finetune_trajopt.usd",
+                    base_frame="/world",
+                    max_envs=len(finetune_usd_paths),
+                    max_timecode=n_steps * h,
+                    x_space=x_space,
+                    y_space=y_space,
+                    x_per_row=int(math.floor(math.sqrt(len(finetune_usd_paths)))),
+                    local_asset_path="",
+                    dt=(1.0 / fps),
+                )

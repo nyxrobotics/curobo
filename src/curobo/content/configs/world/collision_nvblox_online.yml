@@ -12,6 +12,6 @@ blox:
   world:
     pose: [0,0,0,1,0,0,0]
     integrator_type: "tsdf"
-    voxel_size: 0.03
+    voxel_size: 0.01
     
   

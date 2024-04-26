@@ -38,6 +38,8 @@ parser.add_argument(
 
 parser.add_argument("--robot", type=str, default="franka.yml", help="robot configuration to load")
 args = parser.parse_args()
+# Third Party
+from omni.isaac.kit import SimulationApp
 
 simulation_app = SimulationApp(
     {
@@ -142,21 +144,12 @@ def main():
         robot_cfg,
         world_cfg_list,
         tensor_args,
-        trajopt_tsteps=32,
         collision_checker_type=CollisionCheckerType.MESH,
         use_cuda_graph=True,
-        num_trajopt_seeds=12,
-        num_graph_seeds=12,
         interpolation_dt=0.03,
-        collision_cache={"obb": 6, "mesh": 6},
+        collision_cache={"obb": 10, "mesh": 10},
         collision_activation_distance=0.025,
-        acceleration_scale=1.0,
-        self_collision_check=True,
         maximum_trajectory_dt=0.25,
-        fixed_iters_trajopt=True,
-        finetune_dt_scale=1.05,
-        grad_trajopt_iters=300,
-        minimize_jerk=False,
     )
     motion_gen = MotionGen(motion_gen_config)
     j_names = robot_cfg["kinematics"]["cspace"]["joint_names"]
@@ -164,7 +157,9 @@ def main():
 
     print("warming up...")
     motion_gen.warmup(
-        enable_graph=False, warmup_js_trajopt=False, batch=n_envs, batch_env_mode=True
+        batch=n_envs,
+        batch_env_mode=True,
+        warmup_js_trajopt=False,
     )
 
     add_extensions(simulation_app, args.headless_mode)
@@ -178,7 +173,7 @@ def main():
     x_sph[..., 3] = radius
     env_query_idx = torch.arange(n_envs, device=tensor_args.device, dtype=torch.int32)
     plan_config = MotionGenPlanConfig(
-        enable_graph=False, enable_graph_attempt=4, max_attempts=2, enable_finetune_trajopt=True
+        enable_graph=False, max_attempts=2, enable_finetune_trajopt=True
     )
     prev_goal = None
     cmd_plan = [None, None]
@@ -194,7 +189,7 @@ def main():
             continue
         step_index = my_world.current_time_step_index
 
-        if step_index == 0:
+        if step_index <= 2:
             my_world.reset()
             for robot in robot_list:
                 idx_list = [robot.get_dof_index(x) for x in j_names]
@@ -246,7 +241,7 @@ def main():
         if (
             (torch.sum(prev_distance[0] > 1e-2) or torch.sum(prev_distance[1] > 1e-2))
             and (torch.sum(past_distance[0]) == 0.0 and torch.sum(past_distance[1] == 0.0))
-            and torch.norm(full_js.velocity) < 0.01
+            and torch.max(torch.abs(full_js.velocity)) < 0.2
             and cmd_plan[0] is None
             and cmd_plan[1] is None
         ):
@@ -254,23 +249,24 @@ def main():
             result = motion_gen.plan_batch_env(full_js, ik_goal, plan_config.clone())
 
             prev_goal.copy_(ik_goal)
-            trajs = result.get_paths()
-            for s in range(len(result.success)):
-                if result.success[s]:
-                    cmd_plan[s] = motion_gen.get_full_js(trajs[s])
-                    # cmd_plan = result.get_interpolated_plan()
-                    # cmd_plan = motion_gen.get_full_js(cmd_plan)
-                    # get only joint names that are in both:
-                    idx_list = []
-                    common_js_names = []
-                    for x in sim_js_names:
-                        if x in cmd_plan[s].joint_names:
-                            idx_list.append(robot_list[s].get_dof_index(x))
-                            common_js_names.append(x)
+            if torch.count_nonzero(result.success) > 0:
+                trajs = result.get_paths()
+                for s in range(len(result.success)):
+                    if result.success[s]:
+                        cmd_plan[s] = motion_gen.get_full_js(trajs[s])
+                        # cmd_plan = result.get_interpolated_plan()
+                        # cmd_plan = motion_gen.get_full_js(cmd_plan)
+                        # get only joint names that are in both:
+                        idx_list = []
+                        common_js_names = []
+                        for x in sim_js_names:
+                            if x in cmd_plan[s].joint_names:
+                                idx_list.append(robot_list[s].get_dof_index(x))
+                                common_js_names.append(x)
 
-                    cmd_plan[s] = cmd_plan[s].get_ordered_joint_state(common_js_names)
+                        cmd_plan[s] = cmd_plan[s].get_ordered_joint_state(common_js_names)
 
-                cmd_idx = 0
+                    cmd_idx = 0
         # print(cmd_plan)
 
         for s in range(len(cmd_plan)):

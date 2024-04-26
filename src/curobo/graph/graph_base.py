@@ -33,6 +33,7 @@ from curobo.types.base import TensorDeviceType
 from curobo.types.robot import JointState, RobotConfig, State
 from curobo.util.logger import log_info, log_warn
 from curobo.util.sample_lib import HaltonGenerator
+from curobo.util.torch_utils import get_torch_jit_decorator
 from curobo.util.trajectory import InterpolateType, get_interpolated_trajectory
 from curobo.util_file import (
     get_robot_configs_path,
@@ -143,6 +144,7 @@ class GraphConfig:
         graph_file: str = "graph.yml",
         self_collision_check: bool = True,
         use_cuda_graph: bool = True,
+        seed: Optional[int] = None,
     ):
         graph_data = load_yaml(join_path(get_task_configs_path(), graph_file))
         base_config_data = load_yaml(join_path(get_task_configs_path(), base_cfg_file))
@@ -181,6 +183,8 @@ class GraphConfig:
             arm_base_cg_rollout = ArmBase(cfg_cg)
         else:
             arm_base_cg_rollout = arm_base
+        if seed is not None:
+            graph_data["graph"]["seed"] = seed
         graph_cfg = GraphConfig.from_dict(
             graph_data["graph"],
             tensor_args,
@@ -637,29 +641,13 @@ class GraphPlanBase(GraphConfig):
     @torch.no_grad()
     def find_paths(self, x_init, x_goal, interpolation_steps: Optional[int] = None) -> GraphResult:
         start_time = time.time()
-
+        path = None
         try:
             path = self._find_paths(x_init, x_goal)
             path.success = torch.as_tensor(
                 path.success, device=self.tensor_args.device, dtype=torch.bool
             )
             path.solve_time = time.time() - start_time
-            if self.interpolation_type is not None and torch.count_nonzero(path.success):
-                (
-                    path.interpolated_plan,
-                    path.path_buffer_last_tstep,
-                    path.optimized_dt,
-                ) = self.get_interpolated_trajectory(path.plan, interpolation_steps)
-                # path.js_interpolated_plan = self.rollout_fn.get_full_dof_from_solution(
-                #    path.interpolated_plan
-                # )
-                if self.compute_metrics:
-                    # compute metrics on interpolated plan:
-                    path.metrics = self.get_metrics(path.interpolated_plan)
-
-                    path.success = torch.logical_and(
-                        path.success, torch.all(path.metrics.feasible, 1)
-                    )
 
         except ValueError as e:
             log_info(e)
@@ -667,12 +655,29 @@ class GraphPlanBase(GraphConfig):
             torch.cuda.empty_cache()
             success = torch.zeros(x_init.shape[0], device=self.tensor_args.device, dtype=torch.bool)
             path = GraphResult(success, x_init, x_goal)
+            return path
         except RuntimeError as e:
             log_warn(e)
             self.reset_buffer()
             torch.cuda.empty_cache()
             success = torch.zeros(x_init.shape[0], device=self.tensor_args.device, dtype=torch.long)
             path = GraphResult(success, x_init, x_goal)
+            return path
+        if self.interpolation_type is not None and (torch.count_nonzero(path.success) > 0):
+            (
+                path.interpolated_plan,
+                path.path_buffer_last_tstep,
+                path.optimized_dt,
+            ) = self.get_interpolated_trajectory(path.plan, interpolation_steps)
+            # path.js_interpolated_plan = self.rollout_fn.get_full_dof_from_solution(
+            #    path.interpolated_plan
+            # )
+            if self.compute_metrics:
+                # compute metrics on interpolated plan:
+                path.metrics = self.get_metrics(path.interpolated_plan)
+
+                path.success = torch.logical_and(path.success, torch.all(path.metrics.feasible, 1))
+
         return path
 
     @abstractmethod
@@ -907,10 +912,11 @@ class GraphPlanBase(GraphConfig):
         dof = self.dof
 
         i = self.i
-
         if x_set is not None:
             if x_set.shape[0] == 0:
+                log_info("no valid configuration found")
                 return
+
             if connect_mode == "radius":
                 raise NotImplementedError
                 scale_radius = self.neighbour_radius * (np.log(i) / i) ** (1 / dof)
@@ -1027,7 +1033,7 @@ class GraphPlanBase(GraphConfig):
         pass
 
 
-@torch.jit.script
+@get_torch_jit_decorator(dynamic=True)
 def get_unique_nodes(dist_node: torch.Tensor, nodes: torch.Tensor, node_distance: float):
     node_flag = dist_node <= node_distance
     dist_node[node_flag] = 0.0
@@ -1040,7 +1046,7 @@ def get_unique_nodes(dist_node: torch.Tensor, nodes: torch.Tensor, node_distance
     return unique_nodes, n_inv
 
 
-@torch.jit.script
+@get_torch_jit_decorator(force_jit=True, dynamic=True)
 def add_new_nodes_jit(
     nodes, new_nodes, flag, cat_buffer, path, idx, i: int, dof: int
 ) -> Tuple[torch.Tensor, torch.Tensor, int]:
@@ -1064,7 +1070,7 @@ def add_new_nodes_jit(
     return path, node_set, new_nodes.shape[0]
 
 
-@torch.jit.script
+@get_torch_jit_decorator(force_jit=True, dynamic=True)
 def add_all_nodes_jit(
     nodes, cat_buffer, path, i: int, dof: int
 ) -> Tuple[torch.Tensor, torch.Tensor, int]:
@@ -1082,20 +1088,20 @@ def add_all_nodes_jit(
     return path, node_set, nodes.shape[0]
 
 
-@torch.jit.script
+@get_torch_jit_decorator(force_jit=True, dynamic=True)
 def compute_distance_norm_jit(pt, batch_pts, distance_weight):
     vec = (batch_pts - pt) * distance_weight
     dist = torch.norm(vec, dim=-1)
     return dist
 
 
-@torch.jit.script
+@get_torch_jit_decorator(dynamic=True)
 def compute_distance_jit(pt, batch_pts, distance_weight):
     vec = (batch_pts - pt) * distance_weight
     return vec
 
 
-@torch.jit.script
+@get_torch_jit_decorator(dynamic=True)
 def compute_rotation_frame_jit(
     x_start: torch.Tensor, x_goal: torch.Tensor, rot_frame_col: torch.Tensor
 ) -> torch.Tensor:
@@ -1112,7 +1118,7 @@ def compute_rotation_frame_jit(
     return C
 
 
-@torch.jit.script
+@get_torch_jit_decorator(force_jit=True, dynamic=True)
 def biased_vertex_projection_jit(
     x_start,
     x_goal,
@@ -1142,7 +1148,7 @@ def biased_vertex_projection_jit(
     return x_samples
 
 
-@torch.jit.script
+@get_torch_jit_decorator(force_jit=True, dynamic=True)
 def cat_xc_jit(x, n: int):
     c = x[:, 0:1] * 0.0
     xc_search = torch.cat((x, c), dim=1)[:n, :]
