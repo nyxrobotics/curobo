@@ -928,7 +928,7 @@
     <!--<dynamics-->
     <!--  damping="1.0"-->
     <!--  friction="0" />-->
-    <mimic joint="drive_joint" multiplier="1" offset="0"/>
+    <!--<mimic joint="drive_joint" multiplier="1" offset="0"/>-->
   </joint>
   <link name="left_inner_knuckle">
     <inertial>
@@ -961,7 +961,7 @@
     <!--<dynamics-->
     <!--  damping="1.0"-->
     <!--  friction="0" />-->
-    <mimic joint="drive_joint" multiplier="1" offset="0"/>
+    <!--<mimic joint="drive_joint" multiplier="1" offset="0"/>-->
   </joint>
   <gazebo>
     <joint name="left_loop_joint" type="revolute">
@@ -1015,7 +1015,7 @@
     <!--<dynamics-->
     <!--  damping="1.0"-->
     <!--  friction="0" />-->
-    <mimic joint="drive_joint" multiplier="1" offset="0"/>
+    <!--<mimic joint="drive_joint" multiplier="1" offset="0"/>-->
   </joint>
   <link name="right_finger">
     <inertial>
@@ -1060,7 +1060,7 @@
     <!--<dynamics-->
     <!--  damping="1.0"-->
     <!--  friction="0" />-->
-    <mimic joint="drive_joint" multiplier="1" offset="0"/>
+    <!--<mimic joint="drive_joint" multiplier="1" offset="0"/>-->
   </joint>
   <link name="right_inner_knuckle">
     <inertial>
@@ -1093,7 +1093,7 @@
     <!--<dynamics-->
     <!--  damping="1.0"-->
     <!--  friction="0" />-->
-    <mimic joint="drive_joint" multiplier="1" offset="0"/>
+    <!--<mimic joint="drive_joint" multiplier="1" offset="0"/>-->
   </joint>
   <gazebo>
     <joint name="right_loop_joint" type="revolute">
