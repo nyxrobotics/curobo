@@ -31,7 +31,7 @@ parser.add_argument(
     default=False,
 )
 
-parser.add_argument("--robot", type=str, default="franka.yml", help="robot configuration to load")
+parser.add_argument("--robot", type=str, default="soar.yml", help="robot configuration to load")
 args = parser.parse_args()
 
 ############################################################
@@ -198,7 +198,7 @@ def main():
     ik_solver = IKSolver(ik_config)
 
     # get pose grid:
-    position_grid_offset = tensor_args.to_device(get_pose_grid(10, 10, 5, 0.5, 0.5, 0.5))
+    position_grid_offset = tensor_args.to_device(get_pose_grid(5, 5, 10, 0.5, 0.5, 1.0))
 
     # read current ik pose and warmup?
     fk_state = ik_solver.fk(ik_solver.get_retract_config().view(1, -1))

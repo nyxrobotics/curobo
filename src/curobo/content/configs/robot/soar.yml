@@ -612,14 +612,14 @@ robot_cfg:
       }
     }
     lock_joints: {
-      "drive_joint": 0.0,
-      "left_finger_joint": 0.0,
-      "left_inner_knuckle_joint": 0.0,
-      "right_finger_joint": 0.0,
-      "right_outer_knuckle_joint": 0.0,
-      "right_inner_knuckle_joint": 0.0,
-      "head_pan_joint": 0.0,
-      "head_tilt_joint": 0.0
+      #"drive_joint": 0.0,
+      #"left_finger_joint": 0.0,
+      #"left_inner_knuckle_joint": 0.0,
+      #"right_finger_joint": 0.0,
+      #"right_outer_knuckle_joint": 0.0,
+      #"right_inner_knuckle_joint": 0.0,
+      #"head_pan_joint": 0.0,
+      #"head_tilt_joint": 0.0
     }
     use_global_cumul: True
     mesh_link_names: [] # List[str]
@@ -634,16 +634,19 @@ robot_cfg:
         - 'arm_joint5'
         - 'arm_joint6'
         - 'arm_joint7'
-        - 'drive_joint'
-        - 'left_finger_joint'
-        - 'left_inner_kunckle_joint'
-        - 'right_finger_joint'
-        - 'right_outer_knuckle_joint'
-        - 'right_inner_kunckle_joint'
-        - 'head_pan_link'
-        - 'head_tilt_link'
-      retract_config: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-      null_space_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-      cspace_distance_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        #- 'drive_joint'
+        #- 'left_finger_joint'
+        #- 'left_inner_kunckle_joint'
+        #- 'right_finger_joint'
+        #- 'right_outer_knuckle_joint'
+        #- 'right_inner_kunckle_joint'
+        #- 'head_pan_link'
+        #- 'head_tilt_link'
+      #retract_config: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      retract_config: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      #null_space_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      null_space_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      #cspace_distance_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      cspace_distance_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
       max_jerk: 500.0
       max_acceleration: 10.0
