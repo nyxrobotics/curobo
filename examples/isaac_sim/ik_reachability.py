@@ -111,7 +111,7 @@ def draw_points(pose, success):
             colors += [(0, 1, 0, 0.25)]
         else:
             colors += [(1, 0, 0, 0.25)]
-    sizes = [40.0 for _ in range(b)]
+    sizes = [20.0 for _ in range(b)]
 
     draw.draw_points(point_list, colors, sizes)
 
@@ -131,7 +131,7 @@ def main():
     # Make a target to follow
     target = cuboid.VisualCuboid(
         "/World/target",
-        position=np.array([0.5, 0, 0.5]),
+        position=np.array([0.5, 0, 0.6]),
         orientation=np.array([0, 1, 0, 0]),
         color=np.array([1.0, 0, 0]),
         size=0.05,
