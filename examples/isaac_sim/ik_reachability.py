@@ -1,15 +1,3 @@
-#
-# Copyright (c) 2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-#
-# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
-# property and proprietary rights in and to this material, related
-# documentation and any modifications thereto. Any use, reproduction,
-# disclosure or distribution of this material and related documentation
-# without an express license agreement from NVIDIA CORPORATION or
-# its affiliates is strictly prohibited.
-#
-
-# Third Party
 import torch
 
 a = torch.zeros(4, device="cuda:0")
@@ -197,16 +185,36 @@ def main():
     )
     ik_solver = IKSolver(ik_config)
 
+    print("IKSolver configured.")  # デバッグメッセージ
+
     # get pose grid:
     position_grid_offset = tensor_args.to_device(get_pose_grid(17, 17, 9, 0.8, 0.8, 0.8))
 
+    # バッチ処理に分割
+    batch_size = 100  # 各バッチのサイズ
+    num_batches = (position_grid_offset.shape[0] + batch_size - 1) // batch_size  # バッチの数
+
     # read current ik pose and warmup?
     fk_state = ik_solver.fk(ik_solver.get_retract_config().view(1, -1))
-    goal_pose = fk_state.ee_pose
-    goal_pose = goal_pose.repeat(position_grid_offset.shape[0])
-    goal_pose.position += position_grid_offset
+    goal_pose_position = fk_state.ee_pose.position.view(1, -1).repeat(batch_size, 1)
+    goal_pose_quaternion = fk_state.ee_pose.quaternion.view(1, -1).repeat(batch_size, 1)
+    
+    all_results = []
+    for batch_idx in range(num_batches):
+        start_idx = batch_idx * batch_size
+        end_idx = min((batch_idx + 1) * batch_size, position_grid_offset.shape[0])
+        current_batch = position_grid_offset[start_idx:end_idx]
+        
+        current_goal_position = fk_state.ee_pose.position.view(1, -1).repeat(len(current_batch), 1) + current_batch
+        current_goal_quaternion = fk_state.ee_pose.quaternion.view(1, -1).repeat(len(current_batch), 1)
 
-    result = ik_solver.solve_batch(goal_pose)
+        print(f"Starting IK solve batch {batch_idx + 1}/{num_batches}...")  # デバッグメッセージ
+        result = ik_solver.solve_batch(Pose(position=current_goal_position, quaternion=current_goal_quaternion))
+        print(f"IK solve batch {batch_idx + 1}/{num_batches} completed. Success: {torch.any(result.success)}")  # デバッグメッセージ
+        print(f"Solve time: {result.solve_time} seconds")  # デバッグメッセージ
+
+        all_results.append(result)
+        torch.cuda.empty_cache()  # メモリを解放
 
     print("Curobo is Ready")
     add_extensions(simulation_app, args.headless_mode)
@@ -247,10 +255,8 @@ def main():
                     "/curobo",
                 ],
             ).get_collision_check_world()
-            print([x.name for x in obstacles.objects])
             ik_solver.update_world(obstacles)
             print("Updated World")
-            carb.log_info("Synced CuRobo world from stage.")
 
         # position and orientation of target virtual cube:
         cube_position, cube_orientation = target.get_world_pose()
@@ -306,15 +312,13 @@ def main():
             )
             goal_pose.position[:] = ik_goal.position[:] + position_grid_offset
             goal_pose.quaternion[:] = ik_goal.quaternion[:]
+            print("Starting IK solve batch for new goal...")  # デバッグメッセージ
             result = ik_solver.solve_batch(goal_pose)
+            print(f"IK solve batch completed for new goal. Success: {torch.any(result.success)}")  # デバッグメッセージ
+            print(f"Solve time: {result.solve_time} seconds")  # デバッグメッセージ
 
             succ = torch.any(result.success)
-            print(
-                "IK completed: Poses: "
-                + str(goal_pose.batch)
-                + " Time(s): "
-                + str(result.solve_time)
-            )
+            print(f"IK completed: Poses: {goal_pose.batch} Time(s): {result.solve_time}")  # デバッグメッセージ
             # get spheres and flags:
             draw_points(goal_pose, result.success)
 
@@ -329,10 +333,8 @@ def main():
                     if x in cmd_plan.joint_names:
                         idx_list.append(robot.get_dof_index(x))
                         common_js_names.append(x)
-                # idx_list = [robot.get_dof_index(x) for x in sim_js_names]
 
                 cmd_plan = cmd_plan.get_ordered_joint_state(common_js_names)
-
                 cmd_idx = 0
 
             else:
