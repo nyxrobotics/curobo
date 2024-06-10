@@ -198,7 +198,7 @@ def main():
     ik_solver = IKSolver(ik_config)
 
     # get pose grid:
-    position_grid_offset = tensor_args.to_device(get_pose_grid(5, 5, 10, 0.5, 0.5, 1.0))
+    position_grid_offset = tensor_args.to_device(get_pose_grid(17, 17, 9, 0.8, 0.8, 0.8))
 
     # read current ik pose and warmup?
     fk_state = ik_solver.fk(ik_solver.get_retract_config().view(1, -1))
@@ -222,15 +222,8 @@ def main():
     while simulation_app.is_running():
         my_world.step(render=True)
         if not my_world.is_playing():
-            if i % 100 == 0:
-                print("**** Click Play to start simulation *****")
-            i += 1
-            # if step_index == 0:
-            #    my_world.play()
             continue
-
         step_index = my_world.current_time_step_index
-        # print(step_index)
         if step_index <= 2:
             my_world.reset()
             idx_list = [robot.get_dof_index(x) for x in j_names]
