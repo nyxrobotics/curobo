@@ -318,37 +318,46 @@ def main():
                 position=tensor_args.to_device(ee_translation_goal),
                 quaternion=tensor_args.to_device(ee_orientation_teleop_goal),
             )
-            goal_pose_position = ik_goal.position.repeat(position_grid_offset.shape[0], 1) + position_grid_offset
-            goal_pose_quaternion = ik_goal.quaternion.repeat(position_grid_offset.shape[0], 1)
-            goal_pose = Pose(position=goal_pose_position, quaternion=goal_pose_quaternion)
-            print("Starting IK solve batch for new goal...")  # デバッグメッセージ
-            result = ik_solver.solve_batch(goal_pose)
-            print(f"IK solve batch completed for new goal. Success: {torch.any(result.success)}")  # デバッグメッセージ
-            print(f"Solve time: {result.solve_time} seconds")  # デバッグメッセージ
 
-            succ = torch.any(result.success)
-            print(f"IK completed: Poses: {goal_pose.position.shape[0]} Time(s): {result.solve_time}")  # デバッグメッセージ
-            # get spheres and flags:
-            draw_points(goal_pose, result.success)
+            # 新しい目標をバッチごとに処理
+            for batch_idx in range(num_batches):
+                start_idx = batch_idx * batch_size
+                end_idx = min((batch_idx + 1) * batch_size, total_size)
+                current_batch = position_grid_offset[start_idx:end_idx]
 
-            if succ:
-                # get all solutions:
+                current_goal_position = ik_goal.position.view(1, -1).repeat(batch_size, 1) + current_batch
+                current_goal_quaternion = ik_goal.quaternion.view(1, -1).repeat(batch_size, 1)
 
-                cmd_plan = result.js_solution[result.success]
-                # get only joint names that are in both:
-                idx_list = []
-                common_js_names = []
-                for x in sim_js_names:
-                    if x in cmd_plan.joint_names:
-                        idx_list.append(robot.get_dof_index(x))
-                        common_js_names.append(x)
+                goal_pose = Pose(position=current_goal_position, quaternion=current_goal_quaternion)
 
-                cmd_plan = cmd_plan.get_ordered_joint_state(common_js_names)
-                cmd_idx = 0
+                print(f"Starting IK solve batch for new goal {batch_idx + 1}/{num_batches}...")  # デバッグメッセージ
+                result = ik_solver.solve_batch(goal_pose)
+                print(f"IK solve batch completed for new goal {batch_idx + 1}/{num_batches}. Success: {torch.any(result.success)}")  # デバッグメッセージ
+                print(f"Solve time: {result.solve_time} seconds")  # デバッグメッセージ
 
-            else:
-                carb.log_warn("Plan did not converge to a solution.  No action is being taken.")
-            target_pose = cube_position
+                succ = torch.any(result.success)
+                print(f"IK completed: Poses: {goal_pose.position.shape[0]} Time(s): {result.solve_time}")  # デバッグメッセージ
+                # get spheres and flags:
+                draw_points(goal_pose, result.success)
+
+                if succ:
+                    # get all solutions:
+
+                    cmd_plan = result.js_solution[result.success]
+                    # get only joint names that are in both:
+                    idx_list = []
+                    common_js_names = []
+                    for x in sim_js_names:
+                        if x in cmd_plan.joint_names:
+                            idx_list.append(robot.get_dof_index(x))
+                            common_js_names.append(x)
+
+                    cmd_plan = cmd_plan.get_ordered_joint_state(common_js_names)
+                    cmd_idx = 0
+
+                else:
+                    carb.log_warn("Plan did not converge to a solution.  No action is being taken.")
+                target_pose = cube_position
         past_pose = cube_position
         if cmd_plan is not None and step_index % 20 == 0 and True:
             cmd_state = cmd_plan[cmd_idx]
