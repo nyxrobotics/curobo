@@ -192,8 +192,15 @@ def main():
 
     # バッチ処理に分割
     batch_size = 300  # 各バッチのサイズ
+    print(f"Default batch size: {batch_size}")
     total_size = position_grid_offset.shape[0]
+    num_batches = (total_size + batch_size - 1) // batch_size
     
+    # batch_sizeを調整
+    while (num_batches * batch_size) - total_size >= 0:
+        batch_size -= 1
+
+    batch_size += 1
     # total_size を batch_size の倍数に調整する
     if total_size % batch_size != 0:
         additional_size = batch_size - (total_size % batch_size)
@@ -201,6 +208,8 @@ def main():
 
     total_size = position_grid_offset.shape[0]
     num_batches = (total_size + batch_size - 1) // batch_size  # バッチの数
+
+    print(f"Adjusted batch_size: {batch_size}, num_batches: {num_batches}")  # 調整したbatch_sizeとnum_batchesを表示
 
     # read current ik pose and warmup?
     fk_state = ik_solver.fk(ik_solver.get_retract_config().view(1, -1))
