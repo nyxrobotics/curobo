@@ -188,7 +188,7 @@ def main():
     print("IKSolver configured.")  # デバッグメッセージ
 
     # get pose grid:
-    position_grid_offset = tensor_args.to_device(get_pose_grid(41, 41, 7, 1.0, 1.0, 0.6))
+    position_grid_offset = tensor_args.to_device(get_pose_grid(41, 41, 11, 1.0, 1.0, 1.0))
 
     # バッチ処理に分割
     batch_size = 300  # 各バッチのサイズ
