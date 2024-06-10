@@ -192,21 +192,27 @@ def main():
 
     # バッチ処理に分割
     batch_size = 100  # 各バッチのサイズ
-    num_batches = (position_grid_offset.shape[0] + batch_size - 1) // batch_size  # バッチの数
+    total_size = position_grid_offset.shape[0]
+    
+    # total_size を batch_size の倍数に調整する
+    if total_size % batch_size != 0:
+        additional_size = batch_size - (total_size % batch_size)
+        position_grid_offset = torch.cat([position_grid_offset, position_grid_offset[-1].repeat(additional_size, 1)], dim=0)
+
+    total_size = position_grid_offset.shape[0]
+    num_batches = (total_size + batch_size - 1) // batch_size  # バッチの数
 
     # read current ik pose and warmup?
     fk_state = ik_solver.fk(ik_solver.get_retract_config().view(1, -1))
-    goal_pose_position = fk_state.ee_pose.position.view(1, -1).repeat(batch_size, 1)
-    goal_pose_quaternion = fk_state.ee_pose.quaternion.view(1, -1).repeat(batch_size, 1)
 
     all_results = []
     for batch_idx in range(num_batches):
         start_idx = batch_idx * batch_size
-        end_idx = min((batch_idx + 1) * batch_size, position_grid_offset.shape[0])
+        end_idx = min((batch_idx + 1) * batch_size, total_size)
         current_batch = position_grid_offset[start_idx:end_idx]
 
-        current_goal_position = fk_state.ee_pose.position.view(1, -1).repeat(len(current_batch), 1) + current_batch
-        current_goal_quaternion = fk_state.ee_pose.quaternion.view(1, -1).repeat(len(current_batch), 1)
+        current_goal_position = fk_state.ee_pose.position.view(1, -1).repeat(batch_size, 1) + current_batch
+        current_goal_quaternion = fk_state.ee_pose.quaternion.view(1, -1).repeat(batch_size, 1)
 
         goal_pose = Pose(position=current_goal_position, quaternion=current_goal_quaternion)  # goal_poseを定義
 
