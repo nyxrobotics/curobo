@@ -253,10 +253,17 @@ def main():
     my_world.scene.add_default_ground_plane()
     i = 0
     spheres = None
+    execute_ik = False
+    is_playing_previous = False
     while simulation_app.is_running():
         my_world.step(render=True)
         if not my_world.is_playing():
+            is_playing_previous = False
             continue
+        elif not is_playing_previous:
+             is_playing_previous = True
+             execute_ik = True
+        
         step_index = my_world.current_time_step_index
         if step_index <= 2:
             my_world.reset()
@@ -327,6 +334,10 @@ def main():
             and np.linalg.norm(past_pose - cube_position) == 0.0
             and np.linalg.norm(sim_js.velocities) < 0.2
         ):
+            execute_ik = True
+
+        if execute_ik:
+            execute_ik = False
             # Set EE teleop goals, use cube for simple non-vr init:
             ee_translation_goal = cube_position
             ee_orientation_teleop_goal = cube_orientation
