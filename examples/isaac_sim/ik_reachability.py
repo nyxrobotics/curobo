@@ -191,7 +191,7 @@ def main():
     position_grid_offset = tensor_args.to_device(get_pose_grid(17, 17, 9, 0.8, 0.8, 0.8))
 
     # バッチ処理に分割
-    batch_size = 100  # 各バッチのサイズ
+    batch_size = 300  # 各バッチのサイズ
     total_size = position_grid_offset.shape[0]
     
     # total_size を batch_size の倍数に調整する
@@ -206,6 +206,8 @@ def main():
     fk_state = ik_solver.fk(ik_solver.get_retract_config().view(1, -1))
 
     all_results = []
+    all_goal_positions = []
+    all_goal_success = []
     for batch_idx in range(num_batches):
         start_idx = batch_idx * batch_size
         end_idx = min((batch_idx + 1) * batch_size, total_size)
@@ -222,7 +224,14 @@ def main():
         print(f"Solve time: {result.solve_time} seconds")  # デバッグメッセージ
 
         all_results.append(result)
+        all_goal_positions.append(goal_pose.position.cpu())
+        all_goal_success.append(result.success.cpu())
         torch.cuda.empty_cache()  # メモリを解放
+
+    all_goal_positions = torch.cat(all_goal_positions, dim=0)
+    all_goal_success = torch.cat(all_goal_success, dim=0)
+
+    draw_points(Pose(position=all_goal_positions), all_goal_success)
 
     print("Curobo is Ready")
     add_extensions(simulation_app, args.headless_mode)
@@ -320,6 +329,8 @@ def main():
             )
 
             # 新しい目標をバッチごとに処理
+            all_goal_positions = []
+            all_goal_success = []
             for batch_idx in range(num_batches):
                 start_idx = batch_idx * batch_size
                 end_idx = min((batch_idx + 1) * batch_size, total_size)
@@ -335,14 +346,14 @@ def main():
                 print(f"IK solve batch completed for new goal {batch_idx + 1}/{num_batches}. Success: {torch.any(result.success)}")  # デバッグメッセージ
                 print(f"Solve time: {result.solve_time} seconds")  # デバッグメッセージ
 
+                all_goal_positions.append(goal_pose.position.cpu())
+                all_goal_success.append(result.success.cpu())
+
                 succ = torch.any(result.success)
                 print(f"IK completed: Poses: {goal_pose.position.shape[0]} Time(s): {result.solve_time}")  # デバッグメッセージ
-                # get spheres and flags:
-                draw_points(goal_pose, result.success)
 
-                if succ:
+                if succ and cmd_plan is None:
                     # get all solutions:
-
                     cmd_plan = result.js_solution[result.success]
                     # get only joint names that are in both:
                     idx_list = []
@@ -355,9 +366,12 @@ def main():
                     cmd_plan = cmd_plan.get_ordered_joint_state(common_js_names)
                     cmd_idx = 0
 
-                else:
-                    carb.log_warn("Plan did not converge to a solution.  No action is being taken.")
-                target_pose = cube_position
+            all_goal_positions = torch.cat(all_goal_positions, dim=0)
+            all_goal_success = torch.cat(all_goal_success, dim=0)
+
+            draw_points(Pose(position=all_goal_positions), all_goal_success)
+
+            target_pose = cube_position
         past_pose = cube_position
         if cmd_plan is not None and step_index % 20 == 0 and True:
             cmd_state = cmd_plan[cmd_idx]
