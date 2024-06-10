@@ -116,24 +116,6 @@ def draw_points(pose, success):
     draw.draw_points(point_list, colors, sizes)
 
 
-def create_ik_solver(robot_cfg, world_cfg, tensor_args):
-    ik_config = IKSolverConfig.load_from_robot_config(
-        robot_cfg,
-        world_cfg,
-        rotation_threshold=0.05,
-        position_threshold=0.005,
-        num_seeds=20,
-        self_collision_check=True,
-        self_collision_opt=True,
-        tensor_args=tensor_args,
-        use_cuda_graph=True,
-        collision_checker_type=CollisionCheckerType.MESH,
-        collision_cache={"obb": n_obstacle_cuboids, "mesh": n_obstacle_mesh},
-        # use_fixed_samples=True,
-    )
-    return IKSolver(ik_config)
-
-
 def main():
     # assuming obstacles are in objects_path:
     my_world = World(stage_units_in_meters=1.0)
@@ -157,8 +139,6 @@ def main():
 
     setup_curobo_logger("warn")
     past_pose = None
-    global n_obstacle_cuboids
-    global n_obstacle_mesh
     n_obstacle_cuboids = 30
     n_obstacle_mesh = 10
 
@@ -189,7 +169,21 @@ def main():
 
     world_cfg = WorldConfig(cuboid=world_cfg_table.cuboid, mesh=world_cfg1.mesh)
 
-    ik_solver = create_ik_solver(robot_cfg, world_cfg, tensor_args)
+    ik_config = IKSolverConfig.load_from_robot_config(
+        robot_cfg,
+        world_cfg,
+        rotation_threshold=0.05,
+        position_threshold=0.005,
+        num_seeds=20,
+        self_collision_check=True,
+        self_collision_opt=True,
+        tensor_args=tensor_args,
+        use_cuda_graph=True,
+        collision_checker_type=CollisionCheckerType.MESH,
+        collision_cache={"obb": n_obstacle_cuboids, "mesh": n_obstacle_mesh},
+        # use_fixed_samples=True,
+    )
+    ik_solver = IKSolver(ik_config)
 
     print("IKSolver configured.")  # デバッグメッセージ
 
@@ -204,20 +198,20 @@ def main():
     fk_state = ik_solver.fk(ik_solver.get_retract_config().view(1, -1))
     goal_pose_position = fk_state.ee_pose.position.view(1, -1).repeat(batch_size, 1)
     goal_pose_quaternion = fk_state.ee_pose.quaternion.view(1, -1).repeat(batch_size, 1)
-    
+
     all_results = []
     for batch_idx in range(num_batches):
         start_idx = batch_idx * batch_size
         end_idx = min((batch_idx + 1) * batch_size, position_grid_offset.shape[0])
         current_batch = position_grid_offset[start_idx:end_idx]
-        
+
         current_goal_position = fk_state.ee_pose.position.view(1, -1).repeat(len(current_batch), 1) + current_batch
         current_goal_quaternion = fk_state.ee_pose.quaternion.view(1, -1).repeat(len(current_batch), 1)
 
-        ik_solver = create_ik_solver(robot_cfg, world_cfg, tensor_args)  # CUDAグラフをリセット
+        goal_pose = Pose(position=current_goal_position, quaternion=current_goal_quaternion)  # goal_poseを定義
 
         print(f"Starting IK solve batch {batch_idx + 1}/{num_batches}...")  # デバッグメッセージ
-        result = ik_solver.solve_batch(Pose(position=current_goal_position, quaternion=current_goal_quaternion))
+        result = ik_solver.solve_batch(goal_pose)
         print(f"IK solve batch {batch_idx + 1}/{num_batches} completed. Success: {torch.any(result.success)}")  # デバッグメッセージ
         print(f"Solve time: {result.solve_time} seconds")  # デバッグメッセージ
 
@@ -318,15 +312,16 @@ def main():
                 position=tensor_args.to_device(ee_translation_goal),
                 quaternion=tensor_args.to_device(ee_orientation_teleop_goal),
             )
-            goal_pose.position[:] = ik_goal.position[:] + position_grid_offset
-            goal_pose.quaternion[:] = ik_goal.quaternion[:]
+            goal_pose_position = ik_goal.position.repeat(position_grid_offset.shape[0], 1) + position_grid_offset
+            goal_pose_quaternion = ik_goal.quaternion.repeat(position_grid_offset.shape[0], 1)
+            goal_pose = Pose(position=goal_pose_position, quaternion=goal_pose_quaternion)
             print("Starting IK solve batch for new goal...")  # デバッグメッセージ
             result = ik_solver.solve_batch(goal_pose)
             print(f"IK solve batch completed for new goal. Success: {torch.any(result.success)}")  # デバッグメッセージ
             print(f"Solve time: {result.solve_time} seconds")  # デバッグメッセージ
 
             succ = torch.any(result.success)
-            print(f"IK completed: Poses: {goal_pose.batch} Time(s): {result.solve_time}")  # デバッグメッセージ
+            print(f"IK completed: Poses: {goal_pose.position.shape[0]} Time(s): {result.solve_time}")  # デバッグメッセージ
             # get spheres and flags:
             draw_points(goal_pose, result.success)
 
